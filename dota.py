@@ -13,7 +13,7 @@ url3 = f'https://api.opendota.com/api/players/{steam_32_id}/heroes'
 
 
 # REFRESH
-# resp0 = requests.post(url0)
+resp0 = requests.post(url0)
 
 
 # RANK
@@ -48,12 +48,7 @@ data3 = json.loads(resp3.text)
 
 timestamp = [time.time_ns()]
 
-mydb = my.connect(
-    host="localhost",
-    user="root",
-    password="password",
-    database="dota"
-)
+
 
 
 # GLOBAL WINRATE FOR MY RANK
@@ -68,14 +63,14 @@ data2 = json.loads(resp2.text)
 #         str(x.get(f'{rank}_win')/x.get(f'{rank}_pick') * 100)[:4] + '%'
 #     )
 
-# print(timestamp)
-mycursor = mydb.cursor()
+
 query1 = 'CREATE TABLE global (id int, name varchar(255), picks int, wins int, winrate float)'
 query2 = 'INSERT INTO global VALUES (%s, %s, %s, %s, %s)'
 query4 = 'CREATE TABLE my (id int, picks int, wins int, winrate float)'
 query3 = 'INSERT INTO my VALUES (%s, %s, %s, %s)'
 query5 = '''CREATE TABLE dotanomaly AS (
-            SELECT my.id, global.name AS hero_name, my.winrate AS my_winrate, global.winrate AS global_winrate
+            SELECT my.id, global.name AS hero_name, my.picks AS games, my.winrate AS my_winrate, 
+            global.winrate AS global_winrate
             FROM my
             INNER JOIN global
             ON my.id = global.id
@@ -88,39 +83,59 @@ queryx = 'DROP TABLE my'
 queryy = 'DROP TABLE global'
 queryz = 'DROP TABLE dotanomaly'
 
+mydb = my.connect(
+    host="localhost",
+    user="root",
+    password="password",
+    database="dota"
+)
 
+mycursor = mydb.cursor()
 
-mycursor.execute(query1)
-mycursor.execute(query4)
+try:
+    mydb.autocommit = False
+    mycursor.execute(query1)
+    mycursor.execute(query4)
 
-for x in data2:
-    query2_data = [
-        x.get('id'),
-        x.get('localized_name'),
-        x.get(f'{rank}_pick'),
-        x.get(f'{rank}_win'),
-        round(x.get(f'{rank}_win')/x.get(f'{rank}_pick') * 100, 2)
-    ]
-    mycursor.execute(query2, query2_data)
+    for x in data2:
+        query2_data = [
+            x.get('id'),
+            x.get('localized_name'),
+            x.get(f'{rank}_pick'),
+            x.get(f'{rank}_win'),
+            round(x.get(f'{rank}_win')/x.get(f'{rank}_pick') * 100, 2)
+        ]
+        mycursor.execute(query2, query2_data)
 
-for y in data3:
-    query3_data = [
-        y.get('hero_id'),
-        y.get('games'),
-        y.get('win'),
-        round(y.get('win') / y.get('games') * 100, 2) if y.get('games') != 0 else -1
-    ]
-    if y.get('games') != 0: mycursor.execute(query3, query3_data)
+    for y in data3:
+        query3_data = [
+            y.get('hero_id'),
+            y.get('games'),
+            y.get('win'),
+            round(y.get('win') / y.get('games') * 100, 2) if y.get('games') != 0 else -1
+        ]
+        if y.get('games') != 0: mycursor.execute(query3, query3_data)
 
-mycursor.execute(query5)
+    mycursor.execute(query5)
 
-mycursor.execute(queryd, timestamp)
-mycursor.execute(queryg, timestamp)
-mycursor.execute(querym, timestamp)
-mycursor.execute(queryx)
-mycursor.execute(queryy)
-mycursor.execute(queryz)
+    mycursor.execute(queryd, timestamp)
+    mycursor.execute(queryg, timestamp)
+    mycursor.execute(querym, timestamp)
+    mycursor.execute(queryx)
+    mycursor.execute(queryy)
+    mycursor.execute(queryz)
 
-mydb.commit()
-mycursor.close()
-mydb.close()
+    queryxd = 'SELECT table_name FROM information_schema.tables where table_schema=\'dota\' and table_name REGEXP \'^d\' order by update_time desc limit 3'
+    mycursor.execute(queryxd)
+    test = mycursor.fetchall()
+    # print(type(test[0]))
+    mydb.commit()
+
+except my.Error:
+    mydb.rollback()
+
+# regardless would be more fitting
+finally:
+    if mydb.is_connected():
+        mycursor.close()
+        mydb.close()
